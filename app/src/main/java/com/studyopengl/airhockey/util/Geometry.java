@@ -166,4 +166,26 @@ public class Geometry {
         // of this triangle is the distance from the point to the ray.
         return areaOfTriangleTimesTwo / lengthOfBase;
     }
+
+    public static class Plane {
+        public final Point point;
+        public final Vector normal;
+
+        public Plane(Point point, Vector normal) {
+            this.point = point;
+            this.normal = normal;
+        }
+    }
+
+    // http://en.wikipedia.org/wiki/Line-plane_intersection
+    // This also treats rays as if they were infinite. It will return a
+    // point full of NaNs if there is no intersection point.
+    public static Point intersectionPoint(Ray ray, Plane plane) {
+        Vector rayToPlaneVector = vectorBetween(ray.point, plane.point);
+
+        float scaleFactor = rayToPlaneVector.dotProduct(plane.normal)
+                / ray.vector.dotProduct(plane.normal);
+
+        return ray.point.translate(ray.vector.scale(scaleFactor));
+    }
 }

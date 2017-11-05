@@ -30,6 +30,7 @@ import static android.opengl.GLES20.glClearColor;
 import static android.opengl.GLES20.glViewport;
 import static android.opengl.Matrix.invertM;
 import static android.opengl.Matrix.multiplyMM;
+import static android.opengl.Matrix.multiplyMV;
 import static android.opengl.Matrix.rotateM;
 import static android.opengl.Matrix.setIdentityM;
 import static android.opengl.Matrix.setLookAtM;
@@ -134,7 +135,7 @@ public class AirHockeyRenderer implements Renderer {
         mallet.bindData(colorProgram);
         mallet.draw();
 
-        positionObjectInScene(0f, mallet.height / 2f, 0.4f);
+        positionObjectInScene(blueMalletPosition.x, blueMalletPosition.y, blueMalletPosition.z);
         colorProgram.setUniforms(modelViewProjectionMatrix, 0f, 0f, 1f);
         // Note that we don't have to define the object data twice -- we just
         // draw the same mallet again but in a different position and with a
@@ -165,7 +166,7 @@ public class AirHockeyRenderer implements Renderer {
                 0, modelMatrix, 0);
     }
 
-    private Geometry.Ray convertNormalized2DPintToRay(float normalizedX, float normalizedY) {
+    private Geometry.Ray convertNormalized2DPointToRay(float normalizedX, float normalizedY) {
         // We'll convert these normalized device coordinates into world-space
         // coordinates. We'll pick a point on the near and far planes, and draw a
         // line between them. To do this transform, we need to first multiply by
@@ -178,8 +179,11 @@ public class AirHockeyRenderer implements Renderer {
 
         // 反转的图形投影矩阵有一个属性：把定点和反转的图形投影矩阵相乘后，nearPointWord和farPointWorld实际上就含有了反转的w值。
         // 投影矩阵的意义就是创建不同的w值，以便透视除法施加魔法；因此，如果使用一个反转的投影矩阵，就会得到一个反转的w，可以撤销透视除法影响
-        multiplyMM(nearPointWorld, 0, invertedViewProjectionMatrix, 0, nearPointNdc, 0);
-        multiplyMM(farPointWorld, 0, invertedViewProjectionMatrix, 0, farPointNdc, 0);
+        multiplyMV(
+                nearPointWorld, 0, invertedViewProjectionMatrix, 0, nearPointNdc, 0);
+        multiplyMV(
+                farPointWorld, 0, invertedViewProjectionMatrix, 0, farPointNdc, 0);
+
 
         // Why are we dividing by W? We multiplied our vector by an inverse
         // matrix, so the W value that we end up is actually the *inverse* of
@@ -201,19 +205,37 @@ public class AirHockeyRenderer implements Renderer {
     }
 
     private void divideByW(float[] vector) {
-        vector[0]  /= vector[3];
-        vector[1]  /= vector[3];
-        vector[2]  /= vector[3];
+        vector[0] /= vector[3];
+        vector[1] /= vector[3];
+        vector[2] /= vector[3];
     }
 
     public void handleTouchPress(float normalizedX, float normalizedY) {
+        Geometry.Ray ray = convertNormalized2DPointToRay(normalizedX, normalizedY);
+
+        // Now test if this ray intersects with the mallet by creating a
+        // bounding sphere that wraps the mallet.
         Geometry.Sphere malletBoundingSphere = new Geometry.Sphere(new Geometry.Point(
                 blueMalletPosition.x,
                 blueMalletPosition.y,
                 blueMalletPosition.z
         ), mallet.height / 2);
+
+        // If the ray intersects (if the user touched a part of the screen that
+        // intersects the mallet's bounding sphere), then set malletPressed =
+        // true.
+        malletPressed = Geometry.intersects(malletBoundingSphere, ray);
     }
 
     public void handleTouchDrag(float normalizedX, float normalizedY) {
+        if (malletPressed) {
+            Geometry.Ray ray = convertNormalized2DPointToRay(normalizedX, normalizedY);
+            // Define a plane representing our air hockey table.
+            Geometry.Plane plane = new Geometry.Plane(new Geometry.Point(0, 0, 0), new Geometry.Vector(0, 1, 0));
+            // Find out where the touched point intersects the plane
+            // representing our table. We'll move the mallet along this plane.
+            Geometry.Point touchedPoint = Geometry.intersectionPoint(ray, plane);
+            blueMalletPosition = new Geometry.Point(touchedPoint.x, mallet.height / 2f, touchedPoint.z);
+        }
     }
 }
